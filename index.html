@@ -121,14 +121,17 @@
             </div>
           </div>
           
-          <div class="tab-pane fade p-1" id="member-panel">
+<div class="tab-pane fade p-1" id="member-panel">
             <div id="login-section" class="py-2">
-              <h5 class="fw-bold mb-3" style="color: var(--text-main); font-size:16px;">會員登入驗證</h5>
-              <div class="mb-2"><input type="text" id="login-user" class="form-control form-control-custom" placeholder="請輸入使用者帳號"></div>
+              <h5 class="fw-bold mb-3" style="color: var(--text-main); font-size:16px;">會員登入與註冊</h5>
+              <div class="mb-2"><input type="text" id="login-user" class="form-control form-control-custom" placeholder="請輸入欲登入/註冊之帳號"></div>
               <div class="mb-3"><input type="password" id="login-pass" class="form-control form-control-custom" placeholder="請輸入密碼"></div>
-              <button onclick="login()" class="btn btn-morandi w-100 py-2 shadow-sm">驗證並登入平台</button>
+              <div class="d-flex gap-2">
+                <button onclick="login()" class="btn btn-morandi w-100 py-2 shadow-sm">登入</button>
+                <button onclick="register()" class="btn w-100 py-2 shadow-sm" style="background-color: #e3ded5; color: var(--text-main); border-radius: 10px; font-weight: 500; border: none;">註冊新帳號</button>
+              </div>
             </div>
-
+	
             <div id="upload-section" style="display: none;">
               <div class="d-flex justify-content-between align-items-center mb-3">
                 <span class="fw-bold" id="welcome-text" style="color: var(--morandi-orange); font-size:14px;">歡迎登入</span>
@@ -184,7 +187,7 @@
 
 <script>
   // ⚠️ 請填寫你最新的 GAS Web App 網址
-  const GAS_URL = "https://script.google.com/macros/s/AKfycbw7LRMuw0-S2josECoE0QdpWwIpmwKjw-YvFoOt2IO0dWjXKK0EAU8LKc7jhkh-Y-Hs/exec"; 
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbxtrVwBpm840_R9j8SN7beiFWmwF93NoE2kCn1aNpGx-7USkRH5X5ZJD2umOtCnkgOs/exec"; 
 
   let currentUser = localStorage.getItem("username") || null;
   let currentRole = localStorage.getItem("userRole") || null;
@@ -196,7 +199,7 @@
   spotLayer = L.layerGroup().addTo(map); bikeLayer = L.layerGroup().addTo(map);
   const districtCenters = { "西區": [24.1402, 120.6713], "北區": [24.1565, 120.6796], "中區": [24.1432, 120.6824], "東區": [24.1368, 120.6976], "南區": [24.1192, 120.6652], "西屯區": [24.1678, 120.6401], "南屯區": [24.1376, 120.6402], "北屯區": [24.1824, 120.6997] };
 
-  // --- 認證與登入 ---
+// --- 認證與登入/註冊 ---
   function updateAuthUI() {
     if (currentUser) {
       document.getElementById('login-section').style.display = 'none';
@@ -223,6 +226,32 @@
     }).catch(err => alert("連線驗證失敗！"));
   }
 
+  // 🆕 新增：註冊功能
+  function register() {
+    const user = document.getElementById('login-user').value.trim();
+    const pass = document.getElementById('login-pass').value.trim();
+    if(!user || !pass) return alert("請填寫欲註冊的帳號與密碼！");
+
+    fetch(GAS_URL, {
+      method: "POST", mode: "cors",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "register", username: user, password: pass })
+    })
+    .then(res => res.json())
+    .then(res => {
+      alert(res.message);
+      if (res.status === "success") {
+        // 註冊成功後，自動幫使用者登入
+        currentUser = user; 
+        currentRole = 'member'; // 預設為一般會員
+        localStorage.setItem("username", currentUser); 
+        localStorage.setItem("userRole", currentRole);
+        updateAuthUI(); 
+        loadSpots();
+      }
+    }).catch(err => alert("註冊連線失敗！"));
+  }
+
   function logout() {
     currentUser = null; currentRole = null;
     localStorage.removeItem("username"); localStorage.removeItem("userRole");
@@ -244,33 +273,57 @@
     spotLayer.clearLayers(); listEl.innerHTML = '';
     if (!spots || spots.length === 0) { listEl.innerHTML = '<div class="text-center text-muted p-3">目前資料庫暫無景點！</div>'; return; }
 
-    spots.forEach((spot, index) => {
-      const lat = parseFloat(spot.緯度); const lng = parseFloat(spot.經度);
+spots.forEach((spot, index) => {
+      const lat = parseFloat(spot.緯度); 
+      const lng = parseFloat(spot.經度);
+      
       if (!isNaN(lat) && !isNaN(lng)) {
         const markerId = 'spot_' + index;
-        const marker = L.marker([lat, lng]).addTo(spotLayer).bindPopup(`<div style="width:180px;"><h6 class="fw-bold" style="color:var(--morandi-blue); margin-bottom:4px;">📍 ${spot.名稱}</h6><p style="font-size:12px; margin-bottom:0; color:var(--text-muted);">${spot.地址}</p></div>`);
+        
+        // 🎬 1. 地圖 Popup 內的影片按鈕 (判斷如果有影片連結才產生 HTML)
+        const videoBtnInPopup = spot.影片連結 ? 
+          `<button class="btn btn-sm text-white w-100 mt-2 shadow-sm" style="background-color: var(--morandi-orange); font-size:11px; border-radius:6px; font-weight:500;" onclick="openVideoModal('${spot.影片連結}', event)">🎬 觀看影片</button>` 
+          : '';
+
+        // 地圖標記與氣泡視窗 (將影片按鈕變數塞入)
+        const marker = L.marker([lat, lng]).addTo(spotLayer).bindPopup(
+          `<div style="width:180px;">
+            <h6 class="fw-bold" style="color:var(--morandi-blue); margin-bottom:4px;">📍 ${spot.名稱}</h6>
+            <p style="font-size:12px; margin-bottom:0; color:var(--text-muted);">${spot.地址}</p>
+            ${videoBtnInPopup}
+          </div>`
+        );
         spotMarkers[markerId] = marker;
 
-        // 🌟 亮點：若為 Admin，顯示「編輯」與「下架」兩顆按鈕
+        // 🌟 2. 亮點：若為 Admin，顯示「編輯」與「下架」兩顆按鈕
         let adminActionBtns = '';
         if (currentRole === 'admin') {
           adminActionBtns = `
-            <div class="d-flex flex-nowrap mt-2 mt-sm-0 ms-0 ms-sm-2">
-              <button class="btn btn-sm btn-outline-primary shadow-sm me-1 px-2 py-1" style="font-size:11px; border-radius:6px; font-weight:500;" onclick="openEditModal('${spot.名稱}', '${spot.地址}', '${spot.影片連結 || ''}', event)">編輯</button>
-              <button class="btn btn-sm btn-danger px-2 py-1 shadow-sm" style="font-size:11px; border-radius:6px; background-color:var(--morandi-red); border:none;" onclick="deleteSpot('${spot.名稱}', event)">下架</button>
-            </div>
+            <button class="btn btn-sm btn-outline-primary shadow-sm me-1 px-2 py-1" style="font-size:11px; border-radius:6px; font-weight:500;" onclick="openEditModal('${spot.名稱}', '${spot.地址}', '${spot.影片連結 || ''}', event)">編輯</button>
+            <button class="btn btn-sm btn-danger px-2 py-1 shadow-sm" style="font-size:11px; border-radius:6px; background-color:var(--morandi-red); border:none;" onclick="deleteSpot('${spot.名稱}', event)">下架</button>
           `;
         }
 
+        // 🎬 3. 側邊清單專屬的微型影片按鈕
+        const videoBtnInList = spot.影片連結 ? 
+          `<button class="btn btn-sm shadow-sm me-1 px-2 py-1" style="font-size:11px; border-radius:6px; font-weight:500; color: white; background-color: var(--morandi-orange); border:none;" onclick="openVideoModal('${spot.影片連結}', event)">🎬 影片</button>` 
+          : '';
+
         const item = document.createElement('div');
         item.className = 'list-group-item list-item-custom d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center';
+        
+        // 🧩 4. 組合右側清單 HTML (將 影片按鈕 與 管理員按鈕 包在同一個 d-flex 區塊內並排)
         item.innerHTML = `
           <div style="max-width: 100%;">
             <div class="fw-bold mb-1" style="color: var(--text-main); font-size:14px; text-align:left;">📍 ${spot.名稱}</div>
             <small class="text-muted d-block text-truncate" style="text-align:left; font-size:11px;">${spot.地址 || '未知位址'}</small>
           </div>
-          ${adminActionBtns}
+          <div class="d-flex flex-nowrap mt-2 mt-sm-0 ms-0 ms-sm-2">
+            ${videoBtnInList}
+            ${adminActionBtns}
+          </div>
         `;
+        
         item.onclick = function() { map.flyTo([lat, lng], 16); spotMarkers[markerId].openPopup(); };
         listEl.appendChild(item);
       }
@@ -381,6 +434,64 @@
     triggerTabList.forEach(function (triggerEl) { new bootstrap.Tab(triggerEl) });
     updateAuthUI(); loadSpots(); renderLiveYouBike();
   };
+	
+// 🎬 智慧網址轉換與比例控制：自動判斷是 YouTube 還是 IG Reels
+// 🎬 智慧網址轉換與比例控制：自動判斷是 YouTube 還是 IG Reels
+  function openVideoModal(url, event) {
+    if(event) event.stopPropagation(); // 防止觸發背後清單的地圖飛移
+    
+    const frame = document.getElementById('spotVideoFrame');
+    const ratioContainer = document.getElementById('videoRatioContainer');
+
+    // 1. 判斷是否為 Instagram 網址 (包含 Reels 或一般貼文)
+    if (url.includes('instagram.com')) {
+      const igRegExp = /(?:https?:\/\/)?(?:www\.)?instagram\.com\/(?:p|reel)\/([a-zA-Z0-9_-]+)/;
+      const igMatch = url.match(igRegExp);
+      
+      if (igMatch) {
+        // IG 專屬的嵌入網址
+        frame.src = 'https://www.instagram.com/p/' + igMatch[1] + '/embed';
+        
+        // 將容器調整為 IG Reels 適合的直式比例尺寸
+        ratioContainer.className = "mx-auto"; // 移除 Bootstrap 預設的 16:9 限制
+        ratioContainer.style.height = "580px"; // 給予適合手機的高度
+        ratioContainer.style.maxWidth = "340px"; // 限制寬度
+        
+        // 🌟 關鍵修復：明確要求 iframe 必須 100% 填滿這個直式空間
+        frame.style.width = "100%";
+        frame.style.height = "100%";
+      }
+    } 
+    // 2. 判斷是否為 YouTube 網址
+    else {
+      const ytRegExp = /^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*/;
+      const ytMatch = url.match(ytRegExp);
+      
+      if (ytMatch && ytMatch[2].length === 11) {
+        frame.src = 'https://www.youtube.com/embed/' + ytMatch[2] + '?autoplay=1';
+      } else {
+        frame.src = url; 
+      }
+      
+      // 恢復為 YouTube 適合的橫式 16:9 比例
+      ratioContainer.className = "ratio ratio-16x9 mx-auto";
+      ratioContainer.style.height = "";
+      ratioContainer.style.maxWidth = "100%";
+      
+      // 🌟 切換回 YT 時，清除 inline 設定，讓 Bootstrap 重新接管寬高
+      frame.style.width = "";
+      frame.style.height = "";
+    }
+
+    // 顯示 Modal
+    var videoModal = new bootstrap.Modal(document.getElementById('videoModal'));
+    videoModal.show();
+  }
+  // 🎬 停止影片播放（清空 src 來源，包含 IG 與 YT）
+  function stopVideo() {
+    document.getElementById('spotVideoFrame').src = "";
+  }
+	
 </script>
 <div class="modal fade" id="qrModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-sm">
@@ -399,5 +510,22 @@
     </div>
   </div>
 </div>
+	
+	<div class="modal fade" id="videoModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-lg">
+    <div class="modal-content" style="border-radius: var(--radius-main); border: none; background-color: var(--bg-milktea); box-shadow: 0 15px 35px rgba(92, 82, 70, 0.2);">
+      <div class="modal-header" style="border-bottom: none; padding-bottom: 0;">
+        <h5 class="modal-title fw-bold" style="color: var(--text-main); font-size: 16px;">🎬 景點導覽影片</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" onclick="stopVideo()"></button>
+      </div>
+      <div class="modal-body p-4 text-center">
+        <div id="videoRatioContainer" class="ratio ratio-16x9 mx-auto" style="border-radius: 12px; overflow: hidden; box-shadow: 0 8px 20px rgba(92, 82, 70, 0.1);">
+          <iframe id="spotVideoFrame" src="" title="Video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+	
 </body>
 </html>
