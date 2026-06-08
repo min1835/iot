@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <title>台中觀光與 YouBike 即時地圖 (完整 CRUD 版)</title>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <style>
+    :root {
+      --bg-milktea: #f5eedf;      
+      --card-white: #ffffff;      
+      --text-main: #5c5246;       
+      --text-muted: #8e8273;      
+      --morandi-blue: #8fa0a8;    
+      --morandi-orange: #d69f7e;  
+      --morandi-red: #c28285;     
+      --morandi-green: #90a98f;   
+      --radius-main: 16px;        
+    }
+
+    body { background-color: var(--bg-milktea); font-family: 'Noto Sans TC', sans-serif; color: var(--text-main); padding: 15px 5px; }
+    @media (min-width: 992px) { body { padding: 30px 15px; } }
+    h2 { font-weight: 700; color: var(--text-main); font-size: 1.5rem; }
+    @media (min-width: 768px) { h2 { font-size: 2rem; } }
+
+    .main-card { background: var(--card-white); border-radius: var(--radius-main); box-shadow: 0 10px 30px rgba(92, 82, 70, 0.04); padding: 16px; margin-bottom: 20px; }
+    .form-select-custom { background-color: #fcfbfa; border: 1.5px solid #e3ded5; border-radius: 10px; color: var(--text-main); padding: 8px 12px; font-weight: 500; font-size: 14px; }
+    .form-select-custom:focus { border-color: var(--morandi-blue); box-shadow: 0 0 0 3px rgba(143, 160, 168, 0.2); }
+
+    #map { height: 400px; width: 100%; border-radius: var(--radius-main); box-shadow: 0 12px 40px rgba(92, 82, 70, 0.06); border: 4px solid var(--card-white); }
+    .side-container { background: var(--card-white); padding: 16px; border-radius: var(--radius-main); box-shadow: 0 12px 40px rgba(92, 82, 70, 0.06); height: 450px; display: flex; flex-direction: column; }
+    @media (min-width: 992px) { #map { height: 580px; } .side-container { height: 580px; padding: 24px; } }
+
+    .nav-pills .nav-link { color: var(--text-muted); background: #fcfbfa; border: 1px solid #edf0f2; border-radius: 30px; padding: 6px 12px; font-size: 13px; font-weight: 500; margin: 2px; transition: all 0.3s ease; }
+    @media (min-width: 576px) { .nav-pills .nav-link { font-size: 14px; padding: 8px 16px; margin: 0 4px; } }
+    .nav-pills .nav-link.active { background-color: var(--morandi-blue) !important; color: white !important; border-color: var(--morandi-blue); }
+
+    .list-group-container { flex-grow: 1; overflow-y: auto; margin-top: 15px; padding-right: 2px; }
+    .list-group-container::-webkit-scrollbar { width: 5px; }
+    .list-group-container::-webkit-scrollbar-thumb { background: #e3ded5; border-radius: 10px; }
+
+    .list-item-custom { border: none !important; background: #fcfbfa; border-radius: 12px !important; margin-bottom: 8px; padding: 12px 14px; cursor: pointer; transition: transform 0.2s ease, background 0.2s ease; }
+    .list-item-custom:hover { background-color: #f5eedf; transform: translateY(-2px); }
+
+    .form-control-custom { background-color: #fcfbfa; border: 1.5px solid #edf0f2; border-radius: 10px; padding: 10px; color: var(--text-main); font-size: 14px; }
+    .form-control-custom:focus { border-color: var(--morandi-orange); box-shadow: 0 0 0 3px rgba(214, 159, 126, 0.2); }
+
+    .btn-morandi { background-color: var(--morandi-blue); color: white; border-radius: 10px; padding: 10px; font-weight: 500; border: none; font-size: 15px; }
+    .btn-morandi:hover { background-color: #7d8e96; color: white; }
+    .btn-post { background-color: var(--morandi-orange); color: white; }
+    .btn-post:hover { background-color: #c48e6c; color: white; }
+
+    .youbike-icon { background-color: var(--morandi-orange) !important; border: 2px solid #ffffff !important; border-radius: 50% !important; box-shadow: 0px 4px 10px rgba(92, 82, 70, 0.2) !important; text-align: center; line-height: 24px !important; color: white !important; font-size: 12px !important; display: block; }
+    .youbike-icon.no-bikes { background-color: var(--morandi-red) !important; }
+    .bg-badge-success { background-color: var(--morandi-green); color: white; }
+    .bg-badge-danger { background-color: var(--morandi-red); color: white; }
+    .bg-badge-primary { background-color: var(--morandi-blue); color: white; }
+  </style>
+</head>
+<body>
+
+<div class="container-fluid px-2 px-md-4" style="max-width: 1400px;">
+  <div class="text-center mb-3 mb-md-4">
+    <h2>☕ 台中慢活旅遊與 YouBike 即時地圖</h2>
+    <p style="color: var(--text-muted); font-size: 14px;" class="mb-2">融合人文景點與公共自行車即時資訊的城市導覽平台</p>
+  </div>
+  
+  <div class="main-card col-12 col-sm-8 col-md-6 col-lg-4 mx-auto text-center py-2">
+    <div class="d-flex align-items-center justify-content-center">
+      <span class="me-2 fw-bold" style="font-size:14px; text-align:right;">🗺️ 探索區域</span>
+      <select class="form-select form-select-custom" id="district-select" onchange="handleDistrictChange()">
+        <option value="all" selected>顯示全台中市</option>
+        <option value="西區">西區</option>
+        <option value="北區">北區</option>
+        <option value="中區">中區</option>
+        <option value="東區">東區</option>
+        <option value="南區">南區</option>
+        <option value="西屯區">西屯區</option>
+        <option value="南屯區">南屯區</option>
+        <option value="北屯區">北屯區</option>
+      </select>
+    </div>
+  </div>
+  
+  <div class="row">
+    <div class="col-lg-7 mb-4">
+      <div id="map"></div>
+    </div>
+    
+    <div class="col-lg-5 mb-4">
+      <div class="side-container">
+        <ul class="nav nav-pills nav-fill" id="infoTab" role="tablist">
+          <li class="nav-item">
+            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#spots-panel" type="button">📍 觀光景點</button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#bikes-panel" type="button">🚲 YouBike 站點</button>
+          </li>
+          <li class="nav-item">
+            <button class="nav-link text-dark" data-bs-toggle="tab" data-bs-target="#member-panel" type="button" style="border: 1px dashed var(--morandi-orange);">👤 會員中心</button>
+          </li>
+        </ul>
+        
+        <div class="tab-content list-group-container" id="infoTabContent">
+          <div class="tab-pane fade show active" id="spots-panel">
+            <div id="spots-list" class="list-group">
+              <div class="text-center text-muted p-4">正在載入台中悠活景點...</div>
+            </div>
+          </div>
+          
+          <div class="tab-pane fade" id="bikes-panel">
+            <div id="bikes-list" class="list-group">
+              <div class="text-center text-muted p-4">正在同步單車即時車位...</div>
+            </div>
+          </div>
+          
+          <div class="tab-pane fade p-1" id="member-panel">
+            <div id="login-section" class="py-2">
+              <h5 class="fw-bold mb-3" style="color: var(--text-main); font-size:16px;">會員登入驗證</h5>
+              <div class="mb-2"><input type="text" id="login-user" class="form-control form-control-custom" placeholder="請輸入使用者帳號"></div>
+              <div class="mb-3"><input type="password" id="login-pass" class="form-control form-control-custom" placeholder="請輸入密碼"></div>
+              <button onclick="login()" class="btn btn-morandi w-100 py-2 shadow-sm">驗證並登入平台</button>
+            </div>
+
+            <div id="upload-section" style="display: none;">
+              <div class="d-flex justify-content-between align-items-center mb-3">
+                <span class="fw-bold" id="welcome-text" style="color: var(--morandi-orange); font-size:14px;">歡迎登入</span>
+                <button onclick="logout()" class="btn btn-sm btn-outline-danger px-2 py-0" style="border-radius:20px; font-size:11px; height:24px;">登出</button>
+              </div>
+              <hr style="border-color: #e3ded5; margin: 10px 0;">
+              <h6 class="fw-bold mb-2" style="font-size:14px;">📢 分享台中新景點</h6>
+              <div class="mb-2"><input type="text" id="name" class="form-control form-control-custom" placeholder="景點名稱 (如: 審計新村)"></div>
+              <div class="mb-2"><input type="text" id="address" class="form-control form-control-custom" placeholder="正確地址 (自動精確定位)"></div>
+              <div class="mb-3"><input type="text" id="videoUrl" class="form-control form-control-custom" placeholder="YouTube 影片連結 (選填)"></div>
+              <button onclick="submitSpot()" class="btn btn-morandi btn-post w-100 py-2 shadow-sm">發布景點投稿</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="editSpotModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content" style="border-radius: var(--radius-main); border: none;">
+      <div class="modal-header" style="background-color: var(--bg-milktea); border-bottom: none; border-radius: var(--radius-main) var(--radius-main) 0 0;">
+        <h5 class="modal-title fw-bold" style="color: var(--text-main); font-size: 16px;">✏️ 編輯景點資料</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-4">
+        <input type="hidden" id="edit-oldName">
+        
+        <div class="mb-3">
+          <label class="form-label fw-bold" style="color: var(--text-muted); font-size: 13px;">景點名稱</label>
+          <input type="text" id="edit-name" class="form-control form-control-custom">
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-bold" style="color: var(--text-muted); font-size: 13px;">完整地址 (修改將自動重新定位)</label>
+          <input type="text" id="edit-address" class="form-control form-control-custom">
+        </div>
+        <div class="mb-3">
+          <label class="form-label fw-bold" style="color: var(--text-muted); font-size: 13px;">影片連結</label>
+          <input type="text" id="edit-videoUrl" class="form-control form-control-custom">
+        </div>
+      </div>
+      <div class="modal-footer" style="border-top: none;">
+        <button type="button" class="btn btn-light shadow-sm" style="border-radius: 8px; font-weight: 500;" data-bs-dismiss="modal">取消</button>
+        <button type="button" class="btn btn-morandi px-4 shadow-sm" onclick="submitEditSpot()">儲存變更</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<script>
+  // ⚠️ 請填寫你最新的 GAS Web App 網址
+  const GAS_URL = "https://script.google.com/macros/s/AKfycbw7LRMuw0-S2josECoE0QdpWwIpmwKjw-YvFoOt2IO0dWjXKK0EAU8LKc7jhkh-Y-Hs/exec"; 
+
+  let currentUser = localStorage.getItem("username") || null;
+  let currentRole = localStorage.getItem("userRole") || null;
+  let allBikeStations = [];
+  let spotLayer, bikeLayer, spotMarkers = {}, bikeMarkers = {};
+
+  const map = L.map('map').setView([24.1402, 120.6713], 15);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OpenStreetMap' }).addTo(map);
+  spotLayer = L.layerGroup().addTo(map); bikeLayer = L.layerGroup().addTo(map);
+  const districtCenters = { "西區": [24.1402, 120.6713], "北區": [24.1565, 120.6796], "中區": [24.1432, 120.6824], "東區": [24.1368, 120.6976], "南區": [24.1192, 120.6652], "西屯區": [24.1678, 120.6401], "南屯區": [24.1376, 120.6402], "北屯區": [24.1824, 120.6997] };
+
+  // --- 認證與登入 ---
+  function updateAuthUI() {
+    if (currentUser) {
+      document.getElementById('login-section').style.display = 'none';
+      document.getElementById('upload-section').style.display = 'block';
+      const roleText = currentRole === 'admin' ? '管理員' : '會員';
+      document.getElementById('welcome-text').innerText = `✨ 身份: ${currentUser} [${roleText}]`;
+    } else {
+      document.getElementById('login-section').style.display = 'block';
+      document.getElementById('upload-section').style.display = 'none';
+    }
+  }
+
+  function login() {
+    const user = document.getElementById('login-user').value.trim();
+    const pass = document.getElementById('login-pass').value.trim();
+    if(!user || !pass) return alert("請填寫帳號密碼！");
+    fetch(GAS_URL, { method: "POST", mode: "cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "login", username: user, password: pass }) })
+    .then(res => res.json()).then(res => {
+      if (res.status === "success") {
+        currentUser = res.username; currentRole = res.role;
+        localStorage.setItem("username", currentUser); localStorage.setItem("userRole", currentRole);
+        updateAuthUI(); loadSpots(); alert(res.message);
+      } else { alert(res.message); }
+    }).catch(err => alert("連線驗證失敗！"));
+  }
+
+  function logout() {
+    currentUser = null; currentRole = null;
+    localStorage.removeItem("username"); localStorage.removeItem("userRole");
+    updateAuthUI(); loadSpots(); alert("已登出平台！");
+  }
+
+  // --- 景點CRUD (讀取, 刪除, 新增, 更新) ---
+  function loadSpots() {
+    const oldScript = document.getElementById('jsonp-spots');
+    if (oldScript) oldScript.remove();
+    const script = document.createElement('script');
+    script.id = 'jsonp-spots';
+    script.src = `${GAS_URL}?callback=receiveSpotsData&ts=${new Date().getTime()}`;
+    document.body.appendChild(script);
+  }
+
+  function receiveSpotsData(spots) {
+    const listEl = document.getElementById('spots-list');
+    spotLayer.clearLayers(); listEl.innerHTML = '';
+    if (!spots || spots.length === 0) { listEl.innerHTML = '<div class="text-center text-muted p-3">目前資料庫暫無景點！</div>'; return; }
+
+    spots.forEach((spot, index) => {
+      const lat = parseFloat(spot.緯度); const lng = parseFloat(spot.經度);
+      if (!isNaN(lat) && !isNaN(lng)) {
+        const markerId = 'spot_' + index;
+        const marker = L.marker([lat, lng]).addTo(spotLayer).bindPopup(`<div style="width:180px;"><h6 class="fw-bold" style="color:var(--morandi-blue); margin-bottom:4px;">📍 ${spot.名稱}</h6><p style="font-size:12px; margin-bottom:0; color:var(--text-muted);">${spot.地址}</p></div>`);
+        spotMarkers[markerId] = marker;
+
+        // 🌟 亮點：若為 Admin，顯示「編輯」與「下架」兩顆按鈕
+        let adminActionBtns = '';
+        if (currentRole === 'admin') {
+          adminActionBtns = `
+            <div class="d-flex flex-nowrap mt-2 mt-sm-0 ms-0 ms-sm-2">
+              <button class="btn btn-sm btn-outline-primary shadow-sm me-1 px-2 py-1" style="font-size:11px; border-radius:6px; font-weight:500;" onclick="openEditModal('${spot.名稱}', '${spot.地址}', '${spot.影片連結 || ''}', event)">編輯</button>
+              <button class="btn btn-sm btn-danger px-2 py-1 shadow-sm" style="font-size:11px; border-radius:6px; background-color:var(--morandi-red); border:none;" onclick="deleteSpot('${spot.名稱}', event)">下架</button>
+            </div>
+          `;
+        }
+
+        const item = document.createElement('div');
+        item.className = 'list-group-item list-item-custom d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center';
+        item.innerHTML = `
+          <div style="max-width: 100%;">
+            <div class="fw-bold mb-1" style="color: var(--text-main); font-size:14px; text-align:left;">📍 ${spot.名稱}</div>
+            <small class="text-muted d-block text-truncate" style="text-align:left; font-size:11px;">${spot.地址 || '未知位址'}</small>
+          </div>
+          ${adminActionBtns}
+        `;
+        item.onclick = function() { map.flyTo([lat, lng], 16); spotMarkers[markerId].openPopup(); };
+        listEl.appendChild(item);
+      }
+    });
+  }
+
+  function submitSpot() {
+    const name = document.getElementById('name').value.trim();
+    const address = document.getElementById('address').value.trim();
+    const videoUrl = document.getElementById('videoUrl').value.trim();
+    if (!name || !address) return alert("請填寫有名稱與地址！");
+    fetch(GAS_URL, { method: "POST", mode: "cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "addSpot", name: name, address: address, videoUrl: videoUrl }) })
+    .then(res => res.json()).then(res => {
+      alert(res.message);
+      if (res.status === "success") {
+        document.getElementById('name').value = ''; document.getElementById('address').value = '';
+        loadSpots();
+        const triggerEl = document.querySelector('#infoTab button[data-bs-target="#spots-panel"]');
+        bootstrap.Tab.getInstance(triggerEl).show();
+      }
+    });
+  }
+
+  function deleteSpot(spotName, event) {
+    event.stopPropagation();
+    if(!confirm(`確定要下架「${spotName}」嗎？`)) return;
+    fetch(GAS_URL, { method: "POST", mode: "cors", headers: { "Content-Type": "text/plain;charset=utf-8" }, body: JSON.stringify({ action: "deleteSpot", spotName: spotName }) })
+    .then(res => res.json()).then(res => { alert(res.message); if(res.status === "success") loadSpots(); });
+  }
+
+  // ✏️ 開啟編輯彈出視窗
+  function openEditModal(name, address, videoUrl, event) {
+    event.stopPropagation(); // 防止點擊按鈕時地圖連動飛移
+    document.getElementById('edit-oldName').value = name;
+    document.getElementById('edit-name').value = name;
+    document.getElementById('edit-address').value = address;
+    document.getElementById('edit-videoUrl').value = videoUrl;
+    
+    // 使用 Bootstrap API 顯示 Modal
+    var editModal = new bootstrap.Modal(document.getElementById('editSpotModal'));
+    editModal.show();
+  }
+
+  // ✏️ 送出編輯資料給後端
+  function submitEditSpot() {
+    const oldName = document.getElementById('edit-oldName').value;
+    const newName = document.getElementById('edit-name').value.trim();
+    const newAddress = document.getElementById('edit-address').value.trim();
+    const newVideoUrl = document.getElementById('edit-videoUrl').value.trim();
+
+    if (!newName || !newAddress) return alert("景點名稱與地址不能空白！");
+
+    fetch(GAS_URL, {
+      method: "POST", mode: "cors",
+      headers: { "Content-Type": "text/plain;charset=utf-8" },
+      body: JSON.stringify({ action: "updateSpot", oldName: oldName, newName: newName, newAddress: newAddress, newVideoUrl: newVideoUrl })
+    })
+    .then(res => res.json())
+    .then(res => {
+      alert(res.message);
+      if (res.status === "success") {
+        // 隱藏 Modal
+        const modalElement = document.getElementById('editSpotModal');
+        const modalInstance = bootstrap.Modal.getInstance(modalElement);
+        modalInstance.hide();
+        loadSpots(); // 重新整理景點與地圖
+      }
+    }).catch(err => alert("更新失敗，請檢查網路連線。"));
+  }
+
+  // --- YouBike 動態 ---
+  function renderLiveYouBike() {
+    fetch("https://corsproxy.io/?" + encodeURIComponent("https://newdatacenter.taichung.gov.tw/api/v1/no-auth/resource.download?rid=a378bb83-a019-4b7b-bc05-d4d55f97ff9e"))
+      .then(res => res.json()).then(stations => { allBikeStations = stations; filterAndRenderBikes("all"); });
+  }
+
+  function filterAndRenderBikes(targetDistrict) {
+    const listEl = document.getElementById('bikes-list'); bikeLayer.clearLayers(); listEl.innerHTML = '';
+    allBikeStations.forEach((station, index) => {
+      const sarea = station.sarea || ""; 
+      if (targetDistrict !== "all" && sarea !== targetDistrict) return;
+      const lat = parseFloat(station.lat || station.Latitude); const lng = parseFloat(station.lng || station.Longitude);
+      const sna = (station.station_name || station.sna || "").replace("YouBike2.0_", "");
+      if (!isNaN(lat) && !isNaN(lng)) {
+        const availableBikes = parseInt(station.available_return_bikes ?? station.sbi) || 0; 
+        const availableSlots = parseInt(station.available_spaces ?? station.bemp) || 0;       
+        const markerId = 'bike_' + index;
+        const marker = L.marker([lat, lng], { icon: L.divIcon({ className: `youbike-icon ${availableBikes>0?'':'no-bikes'}`, html:`🚲`, iconSize:[26,26], iconAnchor:[13,13], popupAnchor:[0,-13] }) }).addTo(bikeLayer);
+        marker.bindPopup(`<div style="width:160px;"><h6 style="color:var(--morandi-orange);margin:0;font-weight:700;">🚲 ${sna}</h6><hr style="margin:5px 0;"><p style="margin:2px 0;font-size:13px;">可借車輛: <b style="color:var(--morandi-green); font-size:15px;">${availableBikes}</b></p><p style="margin:2px 0;font-size:13px;">可還空位: <b style="color:var(--morandi-blue); font-size:15px;">${availableSlots}</b></p></div>`);
+        bikeMarkers[markerId] = marker;
+        const item = document.createElement('div');
+        item.className = 'list-group-item list-item-custom d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center';
+        item.innerHTML = `<div style="max-width:100%;"><div class="fw-bold" style="font-size:13.5px; text-align:left; color:var(--text-main);">${sna}</div><small class="text-muted d-block text-truncate" style="font-size:11px; text-align:left;">區域: ${sarea}</small></div><div class="mt-2 mt-sm-0 ms-0 ms-sm-2 text-start text-sm-end" style="min-width:35%;"><span class="badge bg-badge-success me-1">借:${availableBikes}</span><span class="badge bg-badge-primary">還:${availableSlots}</span></div>`;
+        item.onclick = function() { map.flyTo([lat, lng], 17); bikeMarkers[markerId].openPopup(); };
+        listEl.appendChild(item);
+      }
+    });
+  }
+
+  function handleDistrictChange() {
+    const d = document.getElementById('district-select').value;
+    filterAndRenderBikes(d);
+    map.flyTo(d !== "all" && districtCenters[d] ? districtCenters[d] : [24.1402, 120.6713], d !== "all" ? 15 : 13);
+  }
+
+  window.onload = function() {
+    var triggerTabList = [].slice.call(document.querySelectorAll('#infoTab button'))
+    triggerTabList.forEach(function (triggerEl) { new bootstrap.Tab(triggerEl) });
+    updateAuthUI(); loadSpots(); renderLiveYouBike();
+  };
+</script>
+
+</body>
+</html>
